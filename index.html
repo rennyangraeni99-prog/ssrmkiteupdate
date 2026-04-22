@@ -331,6 +331,17 @@
             margin-left: 10px;
             color: #38a169;
         }
+        .search-box {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .filter-input {
+            padding: 8px 15px;
+            border: 1px solid #cbd5e0;
+            border-radius: 20px;
+            width: 250px;
+        }
     </style>
 </head>
 <body>
@@ -344,7 +355,6 @@
         <div class="undo-redo-group">
             <button onclick="undo()" id="undoBtn" style="background:#d69e2e;">↩️ Undo</button>
         </div>
-        <button onclick="resetToDefaultData()">🔄 Reset ke Data Default</button>
         <button onclick="exportToCSV()">📄 Export ke CSV</button>
         <button onclick="exportToExcel()">📊 Export ke Excel</button>
         <label class="file-input-label">
@@ -352,6 +362,9 @@
             <input type="file" id="importFile" accept=".csv,.xlsx,.xls" onchange="importFile(event)">
         </label>
         <button onclick="exportToJSON()" class="secondary">💾 Backup JSON</button>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 Cari kegiatan/PIC..." class="filter-input" onkeyup="filterTable()">
+        </div>
     </div>
 
     <div class="stats-grid" id="statsCards"></div>
@@ -442,9 +455,30 @@
     // ============================================================
     let projectData = [];
     let currentEditIndex = -1;
+    let searchQuery = "";
     let historyStack = [];
     let currentStateIndex = -1;
     let maxHistory = 50;
+
+    // ============================================================
+    // FUNGSI FORMAT TANGGAL (TANPA TIME)
+    // ============================================================
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function getTodayDate() {
+        return formatDate(new Date());
+    }
+
+    function getFutureDate(days) {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return formatDate(date);
+    }
 
     // ============================================================
     // KONEKSI KE GOOGLE SHEETS
@@ -628,7 +662,6 @@
         }
         renderAll();
         
-        // Auto load dari cloud setelah load local
         setTimeout(() => {
             loadAllFromGoogleSheets();
         }, 500);
@@ -638,21 +671,16 @@
         saveDataToLocal();
     }
     
-    function resetToDefaultData() { 
-        if(confirm("Reset ke default? Semua perubahan akan hilang. Gunakan Undo jika terlanjur.")){ 
-            projectData = JSON.parse(JSON.stringify(defaultData)); 
-            recordChangeAndSave("Reset ke data default");
-            cancelEdit(); 
-            renderAll(); 
-            syncAllToGoogleSheets();
-        } 
-    }
-    
     function isOverdue(status, endDateStr) {
         if(status==="✔") return false;
         const today=new Date(); today.setHours(0,0,0,0);
         const end=new Date(endDateStr);
         return !isNaN(end) && end<today;
+    }
+    
+    function filterTable() {
+        searchQuery = document.getElementById('searchInput').value.toLowerCase();
+        renderAll();
     }
     
     async function saveKegiatan(){
@@ -739,8 +767,9 @@
         document.getElementById('inputJadwal').value="";
         document.getElementById('inputStatus').value="✖";
         document.getElementById('inputPic').value="";
-        document.getElementById('inputStartDate').value=new Date().toISOString().slice(0,10);
-        document.getElementById('inputEndDate').value=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+        // Format tanggal tanpa time
+        document.getElementById('inputStartDate').value = getTodayDate();
+        document.getElementById('inputEndDate').value = getFutureDate(7);
         document.getElementById('inputKendala').value="";
         document.getElementById('inputTindakLanjut').value="";
         document.getElementById('inputKeterangan').value="";
@@ -849,7 +878,17 @@
     // RENDER ALL
     // ============================================================
     function renderAll(){
-        const enriched = projectData.map(d=>({...d, overdue: isOverdue(d.status, d.endDate)}));
+        let filtered = [...projectData];
+        if (searchQuery) {
+            filtered = filtered.filter(d => 
+                d.kegiatan.toLowerCase().includes(searchQuery) || 
+                (d.pic && d.pic.toLowerCase().includes(searchQuery)) ||
+                (d.no && d.no.toLowerCase().includes(searchQuery)) ||
+                (d.keterangan && d.keterangan.toLowerCase().includes(searchQuery))
+            );
+        }
+        
+        const enriched = filtered.map(d=>({...d, overdue: isOverdue(d.status, d.endDate)}));
         const total=enriched.length, selesai=enriched.filter(d=>d.status==="✔").length, belum=enriched.filter(d=>d.status==="✖").length, proses=enriched.filter(d=>d.status==="⏳").length, overdueCount=enriched.filter(d=>d.overdue).length;
         document.getElementById("statsCards").innerHTML=`<div class="card total"><h3>📋 Total</h3><div class="number">${total}</div></div><div class="card selesai"><h3>✅ Selesai</h3><div class="number">${selesai}</div></div><div class="card belum"><h3>❌ Belum</h3><div class="number">${belum}</div></div><div class="card proses"><h3>⏳ Proses</h3><div class="number">${proses}</div></div><div class="card overdue"><h3>⚠️ Overdue</h3><div class="number">${overdueCount}</div></div>`;
         
@@ -873,7 +912,8 @@
         
         const tbody=document.getElementById("tableBody"); tbody.innerHTML="";
         enriched.forEach((d,idx)=>{
-            tbody.innerHTML+=`<tr class="${d.overdue?'overdue-row':''}" onclick="editKegiatan(${idx})">
+            const originalIdx = projectData.findIndex(orig => orig === d);
+            tbody.innerHTML+=`<tr class="${d.overdue?'overdue-row':''}" onclick="editKegiatan(${originalIdx})">
                 <td>${d.no}</div></td>
                 <td>${d.kegiatan}</div></td>
                 <td>${d.jadwal||''}</div></td>
@@ -885,8 +925,8 @@
                 <td>${d.tindakLanjut||''}</div></td>
                 <td>${d.keterangan||''}</div></td>
                 <td>${d.overdue?'<span class="overdue-badge">Terlambat</span>':'-'}</div></td>
-                <td><button class="danger" onclick="event.stopPropagation(); deleteKegiatan(${idx})" style="padding:4px 12px;">🗑️</button></div></td>
-            </table>`;
+                <td><button class="danger" onclick="event.stopPropagation(); deleteKegiatan(${originalIdx})" style="padding:4px 12px;">🗑️</button></div></td>
+            </tr>`;
         });
         
         const valid=enriched.filter(d=>d.startDate&&d.endDate);
