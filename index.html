@@ -342,26 +342,95 @@
             border-radius: 20px;
             width: 250px;
         }
+        .mode-badge {
+            background: #e2e8f0;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .mode-badge.readonly {
+            background: #e74c3c;
+            color: white;
+        }
+        .mode-badge.edit {
+            background: #2ecc71;
+            color: white;
+        }
+        .password-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 10000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        .password-modal.show {
+            display: flex;
+        }
+        .password-box {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+        .password-box h2 {
+            color: #1e3c72;
+            margin-bottom: 10px;
+        }
+        .password-box p {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .password-box input {
+            padding: 12px 15px;
+            width: 100%;
+            border: 1px solid #cbd5e0;
+            border-radius: 10px;
+            font-size: 1rem;
+            margin-bottom: 15px;
+        }
+        .password-box button {
+            background: #2c9b8a;
+            padding: 12px 30px;
+            width: 100%;
+        }
+        .password-error {
+            color: #e74c3c;
+            margin-top: 15px;
+            font-size: 0.85rem;
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>📱 Pemantauan Project SSR Mobile KITE <span id="syncStatus" class="sync-status"></span></h1>
+    <h1>📱 Pemantauan Project SSR Mobile KITE 
+        <span id="syncStatus" class="sync-status"></span>
+        <span id="modeBadge" class="mode-badge readonly">🔒 Read Only</span>
+    </h1>
     <div class="sub">Sinkronisasi dengan Google Sheets | Data tersimpan di cloud</div>
    
     <div class="action-buttons">
+        <button id="enableEditBtn" onclick="showPasswordModal()" style="background:#2c9b8a;">✏️ Enable Edit Mode</button>
         <button onclick="loadAllFromGoogleSheets()" style="background:#3498db;">📥 Load dari Cloud</button>
-        <button onclick="syncAllToGoogleSheets()" style="background:#2c9b8a;">☁️ Save ke Cloud</button>
+        <button onclick="syncAllToGoogleSheets()" style="background:#2c9b8a;" id="syncBtn">☁️ Save ke Cloud</button>
         <div class="undo-redo-group">
             <button onclick="undo()" id="undoBtn" style="background:#d69e2e;">↩️ Undo</button>
         </div>
-        <button onclick="exportToCSV()">📄 Export ke CSV</button>
-        <button onclick="exportToExcel()">📊 Export ke Excel</button>
-        <label class="file-input-label">
+        <button onclick="exportToCSV()" id="exportCsvBtn">📄 Export ke CSV</button>
+        <button onclick="exportToExcel()" id="exportExcelBtn">📊 Export ke Excel</button>
+        <label class="file-input-label" id="importLabel">
             📂 Import CSV/Excel
             <input type="file" id="importFile" accept=".csv,.xlsx,.xls" onchange="importFile(event)">
         </label>
-        <button onclick="exportToJSON()" class="secondary">💾 Backup JSON</button>
+        <button onclick="exportToJSON()" class="secondary" id="exportJsonBtn">💾 Backup JSON</button>
         <div class="search-box">
             <input type="text" id="searchInput" placeholder="🔍 Cari kegiatan/PIC..." class="filter-input" onkeyup="filterTable()">
         </div>
@@ -403,7 +472,7 @@
             <button id="btnCancel" onclick="cancelEdit()" class="secondary" style="display:none;">❌ Batal</button>
             <button onclick="clearForm()" class="secondary">🗑️ Bersihkan</button>
         </div>
-        <div class="info-text">💡 Klik baris tabel untuk EDIT | Data otomatis sync ke cloud | Semua anggota tim melihat data yang sama</div>
+        <div class="info-text">💡 Klik baris tabel untuk EDIT | Tekan "Enable Edit Mode" untuk mengedit data</div>
     </div>
 
     <div class="data-table-wrapper">
@@ -420,11 +489,30 @@
     </div>
 </div>
 
+<!-- PASSWORD MODAL -->
+<div id="passwordModal" class="password-modal">
+    <div class="password-box">
+        <h2>🔐 Verifikasi Password</h2>
+        <p>Masukkan password untuk mengaktifkan mode edit</p>
+        <input type="password" id="editPassword" placeholder="Masukkan password">
+        <button onclick="checkEditPassword()">Verifikasi</button>
+        <div id="passwordError" class="password-error"></div>
+        <button onclick="closePasswordModal()" style="background:#718096; margin-top:10px;">Batal</button>
+    </div>
+</div>
+
 <script>
+    // ============================================================
+    // KONFIGURASI PASSWORD
+    // ============================================================
+    const EDIT_PASSWORD = "FITE2026#";  // Ganti dengan password Anda!
+    let isEditMode = false;
+    let pendingAction = null;
+    let pendingActionParams = null;
+
     // ============================================================
     // KONFIGURASI GOOGLE SHEETS
     // ============================================================
-    // ⚠️ GANTI DENGAN URL APPS SCRIPT ANDA!
     const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbwZgps5aDlUpWop8lGgHgSY3fzbsYE0FSGMTCQDawDDLdhMjKO5AFzua4sskheOxXID/exec";
     
     // ============================================================
@@ -461,6 +549,90 @@
     let maxHistory = 50;
 
     // ============================================================
+    // FITUR PASSWORD MODAL
+    // ============================================================
+    function showPasswordModal(action, params) {
+        pendingAction = action;
+        pendingActionParams = params;
+        document.getElementById('passwordModal').classList.add('show');
+        document.getElementById('editPassword').value = "";
+        document.getElementById('passwordError').innerText = "";
+        document.getElementById('editPassword').focus();
+    }
+    
+    function closePasswordModal() {
+        document.getElementById('passwordModal').classList.remove('show');
+        pendingAction = null;
+        pendingActionParams = null;
+    }
+    
+    function checkEditPassword() {
+        const inputPass = document.getElementById('editPassword').value;
+        const errorDiv = document.getElementById('passwordError');
+        
+        if (inputPass === EDIT_PASSWORD) {
+            isEditMode = true;
+            closePasswordModal();
+            
+            // Update badge
+            const badge = document.getElementById('modeBadge');
+            badge.innerText = "✏️ Edit Mode";
+            badge.className = "mode-badge edit";
+            
+            // Ubah tombol
+            const enableBtn = document.getElementById('enableEditBtn');
+            enableBtn.innerText = "🔒 Disable Edit Mode";
+            enableBtn.onclick = disableEditMode;
+            enableBtn.style.background = "#e74c3c";
+            
+            showToast("✅ Edit Mode aktif! Anda sekarang bisa mengedit data.", "#2ecc71");
+            
+            // Jalankan action yang tertunda
+            if (pendingAction) {
+                if (pendingAction === 'edit' && pendingActionParams !== undefined) {
+                    executeEditKegiatan(pendingActionParams);
+                } else if (pendingAction === 'save') {
+                    executeSaveKegiatan();
+                } else if (pendingAction === 'update') {
+                    executeUpdateKegiatan();
+                } else if (pendingAction === 'delete' && pendingActionParams !== undefined) {
+                    executeDeleteKegiatan(pendingActionParams);
+                } else if (pendingAction === 'import') {
+                    document.getElementById('importFile').click();
+                }
+                pendingAction = null;
+                pendingActionParams = null;
+            }
+        } else {
+            errorDiv.innerText = "Password salah! Akses edit ditolak.";
+            document.getElementById('editPassword').value = "";
+            document.getElementById('editPassword').focus();
+        }
+    }
+    
+    function disableEditMode() {
+        isEditMode = false;
+        
+        // Update badge
+        const badge = document.getElementById('modeBadge');
+        badge.innerText = "🔒 Read Only";
+        badge.className = "mode-badge readonly";
+        
+        // Ubah tombol kembali
+        const enableBtn = document.getElementById('enableEditBtn');
+        enableBtn.innerText = "✏️ Enable Edit Mode";
+        enableBtn.onclick = () => showPasswordModal();
+        enableBtn.style.background = "#2c9b8a";
+        
+        // Batalkan edit jika sedang edit
+        if (currentEditIndex !== -1) {
+            cancelEdit();
+        }
+        
+        showToast("🔒 Read Only Mode Aktif. Password diperlukan untuk edit.", "#3498db");
+    }
+
+    // ============================================================
     // FUNGSI FORMAT TANGGAL (TANPA TIME)
     // ============================================================
     function formatDate(date) {
@@ -484,6 +656,10 @@
     // KONEKSI KE GOOGLE SHEETS
     // ============================================================
     async function syncAllToGoogleSheets() {
+        if (!isEditMode) {
+            showToast("⚠️ Mode Read Only! Aktifkan Edit Mode terlebih dahulu.", "#e74c3c");
+            return;
+        }
         try {
             document.getElementById('syncStatus').innerHTML = "🔄 Menyimpan...";
             document.getElementById('syncStatus').style.color = "#f39c12";
@@ -590,6 +766,10 @@
     }
 
     function undo() {
+        if (!isEditMode) {
+            showToast("⚠️ Mode Read Only! Aktifkan Edit Mode untuk undo.", "#e74c3c");
+            return;
+        }
         if (currentStateIndex > 0) {
             currentStateIndex--;
             projectData = JSON.parse(JSON.stringify(historyStack[currentStateIndex]));
@@ -606,7 +786,7 @@
     function updateUndoButtonState() {
         const undoBtn = document.getElementById('undoBtn');
         if (undoBtn) {
-            if (currentStateIndex <= 0) {
+            if (currentStateIndex <= 0 || !isEditMode) {
                 undoBtn.style.opacity = "0.5";
                 undoBtn.style.cursor = "not-allowed";
             } else {
@@ -673,7 +853,7 @@
     
     function isOverdue(status, endDateStr) {
         if(status==="✔") return false;
-        const today=new Date(); today.setHours(0,0,0,0);
+        const today=new Date(); today;
         const end=new Date(endDateStr);
         return !isNaN(end) && end<today;
     }
@@ -683,7 +863,16 @@
         renderAll();
     }
     
-    async function saveKegiatan(){
+    // Fungsi yang memerlukan verifikasi password
+    function saveKegiatan() {
+        if (!isEditMode) {
+            showPasswordModal('save');
+            return;
+        }
+        executeSaveKegiatan();
+    }
+    
+    function executeSaveKegiatan() {
         if(!document.getElementById('inputNo').value.trim() || !document.getElementById('inputKegiatan').value.trim()) return alert("No dan Kegiatan wajib!");
         projectData.push({
             no: document.getElementById('inputNo').value.trim(),
@@ -700,10 +889,18 @@
         recordChangeAndSave("Tambah kegiatan");
         clearForm(); 
         renderAll();
-        await syncAllToGoogleSheets();
+        syncAllToGoogleSheets();
     }
     
-    async function updateKegiatan(){
+    function updateKegiatan() {
+        if (!isEditMode) {
+            showPasswordModal('update');
+            return;
+        }
+        executeUpdateKegiatan();
+    }
+    
+    function executeUpdateKegiatan() {
         if(currentEditIndex===-1) return;
         projectData[currentEditIndex]={
             no: document.getElementById('inputNo').value.trim(),
@@ -720,10 +917,18 @@
         recordChangeAndSave("Update kegiatan");
         cancelEdit(); 
         renderAll();
-        await syncAllToGoogleSheets();
+        syncAllToGoogleSheets();
     }
     
-    function editKegiatan(idx){
+    function editKegiatan(idx) {
+        if (!isEditMode) {
+            showPasswordModal('edit', idx);
+            return;
+        }
+        executeEditKegiatan(idx);
+    }
+    
+    function executeEditKegiatan(idx) {
         currentEditIndex=idx;
         const d=projectData[idx];
         document.getElementById('inputNo').value=d.no;
@@ -743,13 +948,21 @@
         document.getElementById('formContainer').scrollIntoView({behavior:'smooth'});
     }
     
-    async function deleteKegiatan(idx){
+    function deleteKegiatan(idx) {
+        if (!isEditMode) {
+            showPasswordModal('delete', idx);
+            return;
+        }
+        executeDeleteKegiatan(idx);
+    }
+    
+    function executeDeleteKegiatan(idx) {
         if(confirm(`Hapus "${projectData[idx].kegiatan}"?`)){ 
             projectData.splice(idx,1); 
             recordChangeAndSave("Hapus kegiatan");
             if(currentEditIndex===idx) cancelEdit(); 
             renderAll();
-            await syncAllToGoogleSheets();
+            syncAllToGoogleSheets();
         }
     }
     
@@ -767,7 +980,6 @@
         document.getElementById('inputJadwal').value="";
         document.getElementById('inputStatus').value="✖";
         document.getElementById('inputPic').value="";
-        // Format tanggal tanpa time
         document.getElementById('inputStartDate').value = getTodayDate();
         document.getElementById('inputEndDate').value = getFutureDate(7);
         document.getElementById('inputKendala').value="";
@@ -812,6 +1024,11 @@
     }
 
     function importFile(event){
+        if (!isEditMode) {
+            showPasswordModal('import');
+            event.target.value = '';
+            return;
+        }
         const file = event.target.files[0];
         if(!file) return;
         const ext = file.name.split('.').pop().toLowerCase();
