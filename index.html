@@ -165,31 +165,6 @@
         .gantt-chart {
             min-width: 800px;
         }
-        .gantt-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-            font-size: 0.7rem;
-            font-weight: bold;
-            color: #2d3748;
-            border-bottom: 1px solid #e2e8f0;
-            padding-bottom: 8px;
-        }
-        .gantt-header-label {
-            width: 220px;
-            padding-right: 10px;
-        }
-        .gantt-header-months {
-            flex: 1;
-            display: flex;
-            position: relative;
-        }
-        .month-marker {
-            position: absolute;
-            text-align: center;
-            font-weight: bold;
-            color: #2c5282;
-        }
         .gantt-row {
             display: flex;
             align-items: center;
@@ -261,9 +236,6 @@
         button.warning {
             background: #d69e2e;
         }
-        button.edit-mode {
-            background: #2c9b8a;
-        }
         .form-container {
             background: white;
             border-radius: 20px;
@@ -320,11 +292,6 @@
             cursor: pointer;
             font-weight: 500;
             display: inline-block;
-        }
-        .file-input-label.disabled {
-            background: #a0aec0;
-            cursor: not-allowed;
-            pointer-events: none;
         }
         input[type="file"] {
             display: none;
@@ -440,6 +407,25 @@
             margin-top: 15px;
             font-size: 0.85rem;
         }
+        /* Gantt month header */
+        .gantt-header-label {
+            width: 220px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        .gantt-header-months {
+            flex: 1;
+            position: relative;
+            height: 24px;
+        }
+        .month-header {
+            position: absolute;
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: #2c5282;
+            text-align: center;
+            transform: translateX(-50%);
+        }
     </style>
 </head>
 <body>
@@ -451,19 +437,19 @@
     <div class="sub">Sinkronisasi dengan Google Sheets | Data tersimpan di cloud</div>
    
     <div class="action-buttons">
-        <button id="enableEditBtn" onclick="showPasswordModal()" style="background:#2c9b8a;">✏️ Enable Edit Mode</button>
+        <button id="enableEditBtn" onclick="showPasswordModal(null, null)" style="background:#2c9b8a;">✏️ Enable Edit Mode</button>
         <button onclick="loadAllFromGoogleSheets()" style="background:#3498db;">📥 Load dari Cloud</button>
         <button onclick="syncAllToGoogleSheets()" style="background:#2c9b8a;" id="syncBtn">☁️ Save ke Cloud</button>
         <div class="undo-redo-group">
             <button onclick="undo()" id="undoBtn" style="background:#d69e2e;">↩️ Undo</button>
         </div>
-        <button onclick="exportToCSV()" id="exportCsvBtn">📄 Export ke CSV</button>
-        <button onclick="exportToExcel()" id="exportExcelBtn">📊 Export ke Excel</button>
-        <label class="file-input-label" id="importLabel">
+        <button onclick="exportToCSV()">📄 Export ke CSV</button>
+        <button onclick="exportToExcel()">📊 Export ke Excel</button>
+        <label class="file-input-label">
             📂 Import CSV/Excel
             <input type="file" id="importFile" accept=".csv,.xlsx,.xls" onchange="importFile(event)">
         </label>
-        <button onclick="exportToJSON()" class="secondary" id="exportJsonBtn">💾 Backup JSON</button>
+        <button onclick="exportToJSON()" class="secondary">💾 Backup JSON</button>
         <div class="search-box">
             <input type="text" id="searchInput" placeholder="🔍 Cari kegiatan/PIC..." class="filter-input" onkeyup="filterTable()">
         </div>
@@ -479,7 +465,7 @@
         <div class="pic-recap">
             <h3>👥 Rekap per PIC</h3>
             <table id="picTable">
-                <thead><tr><th>PIC</th><th>Total</th><th>Selesai</th><th>Overdue</th><th>Progres</th></tr></thead>
+                <thead><tr><th>PIC</th><th>Total</th><th>Selesai</th><th>Overdue</th><th>Progres</th><tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -541,7 +527,7 @@
     // ============================================================
     // KONFIGURASI PASSWORD
     // ============================================================
-    const EDIT_PASSWORD = "FITE2026#";  // Ganti dengan password Anda!
+    const EDIT_PASSWORD = "FITE2026#";
     let isEditMode = false;
     let pendingAction = null;
     let pendingActionParams = null;
@@ -588,7 +574,19 @@
     let maxHistory = 50;
 
     // ============================================================
-    // FUNGSI UNTUK GENERATE MONTH HEADER PADA GANTT CHART
+    // FUNGSI FORMAT TANGGAL KE DD-MM
+    // ============================================================
+    function formatDDMM(dateStr) {
+        if (!dateStr) return '';
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}-${parts[1]}`;
+        }
+        return dateStr;
+    }
+
+    // ============================================================
+    // FUNGSI GENERATE MONTH HEADER
     // ============================================================
     function generateMonthHeaders(startDate, endDate, totalDays) {
         const start = new Date(startDate);
@@ -622,9 +620,7 @@
             months.push({
                 name: `${monthName} ${yearShort}`,
                 left: leftPos,
-                width: width,
-                monthNum: currentMonth.getMonth(),
-                year: currentMonth.getFullYear()
+                width: width
             });
             
             currentMonth.setMonth(currentMonth.getMonth() + 1);
@@ -634,15 +630,23 @@
     }
 
     // ============================================================
-    // FUNGSI FORMAT TANGGAL KE DD-MM
+    // FUNGSI FORMAT TANGGAL (TANPA TIME)
     // ============================================================
-    function formatDDMM(dateStr) {
-        if (!dateStr) return '';
-        const parts = dateStr.split('-');
-        if (parts.length === 3) {
-            return `${parts[2]}-${parts[1]}`;
-        }
-        return dateStr;
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function getTodayDate() {
+        return formatDate(new Date());
+    }
+
+    function getFutureDate(days) {
+        const date = new Date();
+        date.setDate(date.getDate() + days);
+        return formatDate(date);
     }
 
     // ============================================================
@@ -682,21 +686,19 @@
             
             showToast("✅ Edit Mode aktif! Anda sekarang bisa mengedit data.", "#2ecc71");
             
-            if (pendingAction) {
-                if (pendingAction === 'edit' && pendingActionParams !== undefined) {
-                    executeEditKegiatan(pendingActionParams);
-                } else if (pendingAction === 'save') {
-                    executeSaveKegiatan();
-                } else if (pendingAction === 'update') {
-                    executeUpdateKegiatan();
-                } else if (pendingAction === 'delete' && pendingActionParams !== undefined) {
-                    executeDeleteKegiatan(pendingActionParams);
-                } else if (pendingAction === 'import') {
-                    document.getElementById('importFile').click();
-                }
-                pendingAction = null;
-                pendingActionParams = null;
+            if (pendingAction === 'edit' && pendingActionParams !== undefined) {
+                executeEditKegiatan(pendingActionParams);
+            } else if (pendingAction === 'save') {
+                executeSaveKegiatan();
+            } else if (pendingAction === 'update') {
+                executeUpdateKegiatan();
+            } else if (pendingAction === 'delete' && pendingActionParams !== undefined) {
+                executeDeleteKegiatan(pendingActionParams);
+            } else if (pendingAction === 'import') {
+                document.getElementById('importFile').click();
             }
+            pendingAction = null;
+            pendingActionParams = null;
         } else {
             errorDiv.innerText = "Password salah! Akses edit ditolak.";
             document.getElementById('editPassword').value = "";
@@ -713,7 +715,7 @@
         
         const enableBtn = document.getElementById('enableEditBtn');
         enableBtn.innerText = "✏️ Enable Edit Mode";
-        enableBtn.onclick = () => showPasswordModal();
+        enableBtn.onclick = () => showPasswordModal(null, null);
         enableBtn.style.background = "#2c9b8a";
         
         if (currentEditIndex !== -1) {
@@ -721,121 +723,6 @@
         }
         
         showToast("🔒 Read Only Mode Aktif. Password diperlukan untuk edit.", "#3498db");
-    }
-
-    // ============================================================
-    // FUNGSI FORMAT TANGGAL (TANPA TIME)
-    // ============================================================
-    function formatDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-
-    function getTodayDate() {
-        return formatDate(new Date());
-    }
-
-    function getFutureDate(days) {
-        const date = new Date();
-        date.setDate(date.getDate() + days);
-        return formatDate(date);
-    }
-
-    // ============================================================
-    // KONEKSI KE GOOGLE SHEETS
-    // ============================================================
-    async function syncAllToGoogleSheets() {
-        if (!isEditMode) {
-            showToast("⚠️ Mode Read Only! Aktifkan Edit Mode terlebih dahulu.", "#e74c3c");
-            return;
-        }
-        try {
-            document.getElementById('syncStatus').innerHTML = "🔄 Menyimpan...";
-            document.getElementById('syncStatus').style.color = "#f39c12";
-            
-            const dataToSend = projectData.map(item => ({
-                NO: item.no,
-                KEGIATAN: item.kegiatan,
-                JADWAL: item.jadwal,
-                STATUS: item.status,
-                PIC: item.pic,
-                "START DATE": item.startDate,
-                "END DATE": item.endDate,
-                KENDALA: item.kendala,
-                "TINDAK LANJUT": item.tindakLanjut,
-                KETERANGAN: item.keterangan
-            }));
-            
-            await fetch(GOOGLE_SHEETS_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "write", data: dataToSend })
-            });
-            
-            document.getElementById('syncStatus').innerHTML = "✅ Tersimpan!";
-            document.getElementById('syncStatus').style.color = "#38a169";
-            showToast("✅ Data tersimpan ke cloud!", "#2ecc71");
-            
-            setTimeout(() => {
-                document.getElementById('syncStatus').innerHTML = "";
-            }, 3000);
-            
-        } catch(e) {
-            console.error("Sync error:", e);
-            document.getElementById('syncStatus').innerHTML = "⚠️ Gagal sync";
-            document.getElementById('syncStatus').style.color = "#e74c3c";
-            showToast("⚠️ Gagal sync ke cloud", "#e74c3c");
-        }
-    }
-
-    async function loadAllFromGoogleSheets() {
-        try {
-            document.getElementById('syncStatus').innerHTML = "🔄 Memuat...";
-            document.getElementById('syncStatus').style.color = "#f39c12";
-            
-            const response = await fetch(`${GOOGLE_SHEETS_URL}?action=read`, {
-                method: "GET",
-                headers: { "Accept": "application/json" }
-            });
-            
-            const result = await response.json();
-            
-            if (result.success && result.data && result.data.length > 0) {
-                projectData = result.data.map(row => ({
-                    no: row.NO || "",
-                    kegiatan: row.KEGIATAN || "",
-                    jadwal: row.JADWAL || "",
-                    status: row.STATUS || "✖",
-                    pic: row.PIC || "",
-                    startDate: row["START DATE"] || "",
-                    endDate: row["END DATE"] || "",
-                    kendala: row.KENDALA || "",
-                    tindakLanjut: row["TINDAK LANJUT"] || "",
-                    keterangan: row.KETERANGAN || ""
-                }));
-                
-                saveDataToLocal();
-                renderAll();
-                document.getElementById('syncStatus').innerHTML = `✅ ${projectData.length} data`;
-                document.getElementById('syncStatus').style.color = "#38a169";
-                showToast(`✅ Load ${projectData.length} data dari cloud!`, "#2ecc71");
-                
-                setTimeout(() => {
-                    document.getElementById('syncStatus').innerHTML = "";
-                }, 3000);
-            } else {
-                document.getElementById('syncStatus').innerHTML = "⚠️ No data";
-                showToast("⚠️ Tidak ada data di cloud", "#f39c12");
-            }
-            
-        } catch(e) {
-            console.error("Load error:", e);
-            document.getElementById('syncStatus').innerHTML = "⚠️ Gagal load";
-            showToast("⚠️ Gagal load dari cloud, pakai data lokal", "#e74c3c");
-        }
     }
 
     // ============================================================
@@ -955,6 +842,9 @@
         renderAll();
     }
     
+    // ============================================================
+    // CRUD FUNCTIONS
+    // ============================================================
     function saveKegiatan() {
         if (!isEditMode) {
             showPasswordModal('save');
@@ -964,7 +854,10 @@
     }
     
     function executeSaveKegiatan() {
-        if(!document.getElementById('inputNo').value.trim() || !document.getElementById('inputKegiatan').value.trim()) return alert("No dan Kegiatan wajib!");
+        if(!document.getElementById('inputNo').value.trim() || !document.getElementById('inputKegiatan').value.trim()) {
+            alert("No dan Kegiatan wajib diisi!");
+            return;
+        }
         projectData.push({
             no: document.getElementById('inputNo').value.trim(),
             kegiatan: document.getElementById('inputKegiatan').value.trim(),
@@ -992,8 +885,8 @@
     }
     
     function executeUpdateKegiatan() {
-        if(currentEditIndex===-1) return;
-        projectData[currentEditIndex]={
+        if(currentEditIndex === -1) return;
+        projectData[currentEditIndex] = {
             no: document.getElementById('inputNo').value.trim(),
             kegiatan: document.getElementById('inputKegiatan').value.trim(),
             jadwal: document.getElementById('inputJadwal').value,
@@ -1020,23 +913,23 @@
     }
     
     function executeEditKegiatan(idx) {
-        currentEditIndex=idx;
-        const d=projectData[idx];
-        document.getElementById('inputNo').value=d.no;
-        document.getElementById('inputKegiatan').value=d.kegiatan;
-        document.getElementById('inputJadwal').value=d.jadwal||"";
-        document.getElementById('inputStatus').value=d.status;
-        document.getElementById('inputPic').value=d.pic||"";
-        document.getElementById('inputStartDate').value=d.startDate||"";
-        document.getElementById('inputEndDate').value=d.endDate||"";
-        document.getElementById('inputKendala').value=d.kendala||"";
-        document.getElementById('inputTindakLanjut').value=d.tindakLanjut||"";
-        document.getElementById('inputKeterangan').value=d.keterangan||"";
-        document.getElementById('formTitle').innerHTML="✏️ Edit Kegiatan";
-        document.getElementById('btnSave').style.display="none";
-        document.getElementById('btnUpdate').style.display="inline-block";
-        document.getElementById('btnCancel').style.display="inline-block";
-        document.getElementById('formContainer').scrollIntoView({behavior:'smooth'});
+        currentEditIndex = idx;
+        const d = projectData[idx];
+        document.getElementById('inputNo').value = d.no;
+        document.getElementById('inputKegiatan').value = d.kegiatan;
+        document.getElementById('inputJadwal').value = d.jadwal || "";
+        document.getElementById('inputStatus').value = d.status;
+        document.getElementById('inputPic').value = d.pic || "";
+        document.getElementById('inputStartDate').value = d.startDate || "";
+        document.getElementById('inputEndDate').value = d.endDate || "";
+        document.getElementById('inputKendala').value = d.kendala || "";
+        document.getElementById('inputTindakLanjut').value = d.tindakLanjut || "";
+        document.getElementById('inputKeterangan').value = d.keterangan || "";
+        document.getElementById('formTitle').innerHTML = "✏️ Edit Kegiatan";
+        document.getElementById('btnSave').style.display = "none";
+        document.getElementById('btnUpdate').style.display = "inline-block";
+        document.getElementById('btnCancel').style.display = "inline-block";
+        document.getElementById('formContainer').scrollIntoView({behavior: 'smooth'});
     }
     
     function deleteKegiatan(idx) {
@@ -1049,42 +942,129 @@
     
     function executeDeleteKegiatan(idx) {
         if(confirm(`Hapus "${projectData[idx].kegiatan}"?`)){ 
-            projectData.splice(idx,1); 
+            projectData.splice(idx, 1); 
             recordChangeAndSave("Hapus kegiatan");
-            if(currentEditIndex===idx) cancelEdit(); 
+            if(currentEditIndex === idx) cancelEdit(); 
             renderAll();
             syncAllToGoogleSheets();
         }
     }
     
-    function cancelEdit(){
-        currentEditIndex=-1; clearForm();
-        document.getElementById('formTitle').innerHTML="✏️ Tambah Kegiatan Baru";
-        document.getElementById('btnSave').style.display="inline-block";
-        document.getElementById('btnUpdate').style.display="none";
-        document.getElementById('btnCancel').style.display="none";
+    function cancelEdit() {
+        currentEditIndex = -1;
+        clearForm();
+        document.getElementById('formTitle').innerHTML = "✏️ Tambah Kegiatan Baru";
+        document.getElementById('btnSave').style.display = "inline-block";
+        document.getElementById('btnUpdate').style.display = "none";
+        document.getElementById('btnCancel').style.display = "none";
     }
     
-    function clearForm(){
-        document.getElementById('inputNo').value="";
-        document.getElementById('inputKegiatan').value="";
-        document.getElementById('inputJadwal').value="";
-        document.getElementById('inputStatus').value="✖";
-        document.getElementById('inputPic').value="";
+    function clearForm() {
+        document.getElementById('inputNo').value = "";
+        document.getElementById('inputKegiatan').value = "";
+        document.getElementById('inputJadwal').value = "";
+        document.getElementById('inputStatus').value = "✖";
+        document.getElementById('inputPic').value = "";
         document.getElementById('inputStartDate').value = getTodayDate();
         document.getElementById('inputEndDate').value = getFutureDate(7);
-        document.getElementById('inputKendala').value="";
-        document.getElementById('inputTindakLanjut').value="";
-        document.getElementById('inputKeterangan').value="";
+        document.getElementById('inputKendala').value = "";
+        document.getElementById('inputTindakLanjut').value = "";
+        document.getElementById('inputKeterangan').value = "";
     }
 
-    function showToast(message, bgColor = "#2c5282") {
-        const toast = document.createElement('div');
-        toast.className = 'toast-notification';
-        toast.style.backgroundColor = bgColor;
-        toast.innerText = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2000);
+    // ============================================================
+    // KONEKSI KE GOOGLE SHEETS
+    // ============================================================
+    async function syncAllToGoogleSheets() {
+        if (!isEditMode) {
+            showToast("⚠️ Mode Read Only! Aktifkan Edit Mode terlebih dahulu.", "#e74c3c");
+            return;
+        }
+        try {
+            document.getElementById('syncStatus').innerHTML = "🔄 Menyimpan...";
+            document.getElementById('syncStatus').style.color = "#f39c12";
+            
+            const dataToSend = projectData.map(item => ({
+                NO: item.no,
+                KEGIATAN: item.kegiatan,
+                JADWAL: item.jadwal,
+                STATUS: item.status,
+                PIC: item.pic,
+                "START DATE": item.startDate,
+                "END DATE": item.endDate,
+                KENDALA: item.kendala,
+                "TINDAK LANJUT": item.tindakLanjut,
+                KETERANGAN: item.keterangan
+            }));
+            
+            await fetch(GOOGLE_SHEETS_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "write", data: dataToSend })
+            });
+            
+            document.getElementById('syncStatus').innerHTML = "✅ Tersimpan!";
+            document.getElementById('syncStatus').style.color = "#38a169";
+            showToast("✅ Data tersimpan ke cloud!", "#2ecc71");
+            
+            setTimeout(() => {
+                document.getElementById('syncStatus').innerHTML = "";
+            }, 3000);
+            
+        } catch(e) {
+            console.error("Sync error:", e);
+            document.getElementById('syncStatus').innerHTML = "⚠️ Gagal sync";
+            document.getElementById('syncStatus').style.color = "#e74c3c";
+            showToast("⚠️ Gagal sync ke cloud", "#e74c3c");
+        }
+    }
+
+    async function loadAllFromGoogleSheets() {
+        try {
+            document.getElementById('syncStatus').innerHTML = "🔄 Memuat...";
+            document.getElementById('syncStatus').style.color = "#f39c12";
+            
+            const response = await fetch(`${GOOGLE_SHEETS_URL}?action=read`, {
+                method: "GET",
+                headers: { "Accept": "application/json" }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success && result.data && result.data.length > 0) {
+                projectData = result.data.map(row => ({
+                    no: row.NO || "",
+                    kegiatan: row.KEGIATAN || "",
+                    jadwal: row.JADWAL || "",
+                    status: row.STATUS || "✖",
+                    pic: row.PIC || "",
+                    startDate: row["START DATE"] || "",
+                    endDate: row["END DATE"] || "",
+                    kendala: row.KENDALA || "",
+                    tindakLanjut: row["TINDAK LANJUT"] || "",
+                    keterangan: row.KETERANGAN || ""
+                }));
+                
+                saveDataToLocal();
+                renderAll();
+                document.getElementById('syncStatus').innerHTML = `✅ ${projectData.length} data`;
+                document.getElementById('syncStatus').style.color = "#38a169";
+                showToast(`✅ Load ${projectData.length} data dari cloud!`, "#2ecc71");
+                
+                setTimeout(() => {
+                    document.getElementById('syncStatus').innerHTML = "";
+                }, 3000);
+            } else {
+                document.getElementById('syncStatus').innerHTML = "⚠️ No data";
+                showToast("⚠️ Tidak ada data di cloud", "#f39c12");
+            }
+            
+        } catch(e) {
+            console.error("Load error:", e);
+            document.getElementById('syncStatus').innerHTML = "⚠️ Gagal load";
+            showToast("⚠️ Gagal load dari cloud, pakai data lokal", "#e74c3c");
+        }
     }
 
     // ============================================================
@@ -1182,6 +1162,15 @@
         showToast("💾 Backup JSON berhasil");
     }
 
+    function showToast(message, bgColor = "#2c5282") {
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.style.backgroundColor = bgColor;
+        toast.innerText = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }
+
     // ============================================================
     // RENDER ALL
     // ============================================================
@@ -1221,25 +1210,25 @@
         const tbody=document.getElementById("tableBody"); tbody.innerHTML="";
         enriched.forEach((d,idx)=>{
             const originalIdx = projectData.findIndex(orig => orig === d);
+            const statusClass = d.status === "✔" ? "status-selesai" : (d.status === "⏳" ? "status-proses" : "status-belum");
+            const statusText = d.status === "✔" ? "Selesai" : (d.status === "⏳" ? "Proses" : "Belum");
             tbody.innerHTML+=`<tr class="${d.overdue?'overdue-row':''}" onclick="editKegiatan(${originalIdx})">
-                <td>${d.no}</div></td>
-                <td>${d.kegiatan}</div></td>
-                <td>${d.jadwal||''}</div></td>
-                <td>${d.startDate||''}</div></td>
-                <td>${d.endDate||''}</div></td>
-                <td class="status-icon">${d.status}</div></td>
-                <td>${d.pic||''}</div></td>
-                <td>${d.kendala||''}</div></td>
-                <td>${d.tindakLanjut||''}</div></td>
-                <td>${d.keterangan||''}</div></td>
-                <td>${d.overdue?'<span class="overdue-badge">Terlambat</span>':'-'}</div></td>
-                <td><button class="danger" onclick="event.stopPropagation(); deleteKegiatan(${originalIdx})" style="padding:4px 12px;">🗑️</button></div></td>
+                <td>${d.no}</td>
+                <td>${d.kegiatan}</td>
+                <td>${d.jadwal||''}</td>
+                <td>${d.startDate||''}</td>
+                <td>${d.endDate||''}</td>
+                <td class="status-icon">${d.status}</td>
+                <td>${d.pic||''}</td>
+                <td>${d.kendala||''}</td>
+                <td>${d.tindakLanjut||''}</td>
+                <td>${d.keterangan||''}</td>
+                <td>${d.overdue?'<span class="overdue-badge">Terlambat</span>':'-'}</td>
+                <td><button class="danger" onclick="event.stopPropagation(); deleteKegiatan(${originalIdx})" style="padding:4px 12px;">🗑️</button></td>
             </tr>`;
         });
         
-        // ============================================================
-        // GANTT CHART DENGAN MONTH HEADER DAN FORMAT TANGGAL DD-MM
-        // ============================================================
+        // GANTT CHART
         const valid = enriched.filter(d => d.startDate && d.endDate);
         if (valid.length) {
             let minDate = new Date(valid[0].startDate);
@@ -1257,7 +1246,6 @@
             endRange.setDate(endRange.getDate() + 1);
             const totalDays = (endRange - startRange) / (1000 * 3600 * 24);
             
-            // Generate month headers
             const months = generateMonthHeaders(startRange, endRange, totalDays);
             
             let html = `<div style="font-size:0.7rem; margin-bottom:10px;">Timeline: ${startRange.toLocaleDateString()} → ${endRange.toLocaleDateString()}</div>`;
@@ -1266,16 +1254,14 @@
             html += `<div style="display:flex; margin-bottom:8px; align-items:center;">`;
             html += `<div style="width:220px; font-weight:bold; color:#2d3748;">Kegiatan</div>`;
             html += `<div style="flex:1; position:relative; height:24px;">`;
-            
             for (let month of months) {
                 if (month.width > 0) {
                     html += `<div style="position:absolute; left:${month.left}%; width:${month.width}%; text-align:center; font-weight:bold; color:#2c5282; font-size:0.7rem;">${month.name}</div>`;
                 }
             }
-            
             html += `</div></div>`;
             
-            // Baris Gantt dengan format tanggal DD-MM
+            // Baris Gantt
             valid.slice(0, 40).forEach(d => {
                 let start = new Date(d.startDate);
                 let end = new Date(d.endDate);
@@ -1283,17 +1269,14 @@
                 let width = Math.min(100 - left, ((end - start) / (1000 * 3600 * 24) / totalDays) * 100);
                 if (width < 0.5 && width > 0) width = 0.8;
                 let barColor = d.overdue ? "#f6ad55" : "#4299e1";
-                let barClass = d.overdue ? "overdue-bar" : "";
-                
-                // Format tanggal DD-MM
                 const startShort = formatDDMM(d.startDate);
                 const endShort = formatDDMM(d.endDate);
                 const dateLabel = `${startShort}→${endShort}`;
                 
                 html += `<div class="gantt-row" style="margin-bottom:6px;">
-                    <div class="gantt-label" title="${d.kegiatan}">${d.no}. ${d.kegiatan.substring(0, 35)}</div>
+                    <div class="gantt-label" title="${d.kegiatan.replace(/"/g, '&quot;')}">${d.no}. ${d.kegiatan.substring(0, 35)}</div>
                     <div class="gantt-bar-container">
-                        <div class="gantt-bar ${barClass}" style="background:${barColor}; margin-left:${left}%; width:${width}%;">
+                        <div style="background:${barColor}; height:28px; border-radius:12px; margin-left:${left}%; width:${width}%; display:flex; align-items:center; padding-left:8px; color:white; font-size:0.7rem; font-weight:bold;">
                             ${width > 8 ? dateLabel : ''}
                         </div>
                     </div>
