@@ -465,7 +465,7 @@
         <div class="pic-recap">
             <h3>👥 Rekap per PIC</h3>
             <table id="picTable">
-                <thead><tr><th>PIC</th><th>Total</th><th>Selesai</th><th>Overdue</th><th>Progres</th><tr></thead>
+                <thead><tr><th>PIC</th><th>Total</th><th>Selesai</th><th>Overdue</th><th>Progres</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -843,7 +843,7 @@
     }
     
     // ============================================================
-    // CRUD FUNCTIONS
+    // CRUD FUNCTIONS - DIPERBAIKI
     // ============================================================
     function saveKegiatan() {
         if (!isEditMode) {
@@ -885,7 +885,11 @@
     }
     
     function executeUpdateKegiatan() {
-        if(currentEditIndex === -1) return;
+        if(currentEditIndex === -1) {
+            alert("Tidak ada kegiatan yang sedang diedit!");
+            return;
+        }
+        // Update data pada index yang sedang diedit
         projectData[currentEditIndex] = {
             no: document.getElementById('inputNo').value.trim(),
             kegiatan: document.getElementById('inputKegiatan').value.trim(),
