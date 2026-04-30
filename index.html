@@ -464,7 +464,7 @@
         <div class="pic-recap">
             <h3>👥 Rekap per PIC</h3>
             <table id="picTable">
-                <thead><tr><th>PIC</th><th>Total</th><th>Selesai</th><th>Overdue</th><th>Progres</th></td></thead>
+                <thead><tr><th>PIC</th><th>Total</th><th>Selesai</th><th>Overdue</th><th>Progres</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -532,9 +532,9 @@
     let pendingActionParams = null;
 
     // ============================================================
-    // KONFIGURASI GOOGLE SHEETS
+    // KONFIGURASI GOOGLE SHEETS (GANTI DENGAN URL APPS SCRIPT ANDA!)
     // ============================================================
-    const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxx01hzy9JjZUIKLlOD93yZuJEbN5A18KB_KbCDAOueH8GpiAjiZzhvB_9bSTsUU-A1/exec";
+    const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/YOUR_APPS_SCRIPT_URL/exec";
     
     // ============================================================
     // DATA DEFAULT
@@ -876,7 +876,6 @@
         syncAllToGoogleSheets();
     }
     
-    // ========== FUNGSI UPDATE YANG DIPERBAIKI ==========
     function updateKegiatan() {
         console.log("updateKegiatan dipanggil, isEditMode:", isEditMode, "currentEditIndex:", currentEditIndex);
         
@@ -895,7 +894,6 @@
             return;
         }
         
-        // Update data pada index yang sedang diedit
         projectData[currentEditIndex] = {
             no: document.getElementById('inputNo').value.trim(),
             kegiatan: document.getElementById('inputKegiatan').value.trim(),
@@ -910,29 +908,56 @@
         };
         
         recordChangeAndSave("Update kegiatan");
-        cancelEdit(); // Reset form dan kembalikan tombol
+        cancelEdit();
         renderAll();
         syncAllToGoogleSheets();
         showToast("✅ Kegiatan berhasil diupdate!", "#2ecc71");
-        console.log("Update selesai, data baru:", projectData[currentEditIndex]);
     }
-    // ============================================================
     
     function editKegiatan(idx) {
+        console.log("editKegiatan dipanggil dengan idx:", idx, "isEditMode:", isEditMode);
+        
         if (!isEditMode) {
             showPasswordModal('edit', idx);
             return;
         }
-        executeEditKegiatan(idx);
+        
+        const index = parseInt(idx);
+        if (isNaN(index)) {
+            alert("Error: Index tidak valid!");
+            return;
+        }
+        
+        executeEditKegiatan(index);
     }
     
     function executeEditKegiatan(idx) {
-        currentEditIndex = idx;
+        console.log("executeEditKegiatan dipanggil dengan index:", idx);
+        console.log("projectData length:", projectData.length);
+        
+        if (idx === undefined || idx === null) {
+            alert("Error: Index kegiatan tidak valid!");
+            return;
+        }
+        
+        if (idx >= projectData.length) {
+            alert("Error: Data tidak ditemukan! Silakan refresh halaman.");
+            return;
+        }
+        
         const d = projectData[idx];
-        document.getElementById('inputNo').value = d.no;
-        document.getElementById('inputKegiatan').value = d.kegiatan;
+        if (!d) {
+            alert("Error: Data kegiatan tidak ditemukan!");
+            return;
+        }
+        
+        console.log("Data yang akan diedit:", d);
+        
+        currentEditIndex = idx;
+        document.getElementById('inputNo').value = d.no || "";
+        document.getElementById('inputKegiatan').value = d.kegiatan || "";
         document.getElementById('inputJadwal').value = d.jadwal || "";
-        document.getElementById('inputStatus').value = d.status;
+        document.getElementById('inputStatus').value = d.status || "✖";
         document.getElementById('inputPic').value = d.pic || "";
         document.getElementById('inputStartDate').value = d.startDate || "";
         document.getElementById('inputEndDate').value = d.endDate || "";
@@ -940,15 +965,13 @@
         document.getElementById('inputTindakLanjut').value = d.tindakLanjut || "";
         document.getElementById('inputKeterangan').value = d.keterangan || "";
         
-        // Ubah UI untuk mode edit
         document.getElementById('formTitle').innerHTML = "✏️ Edit Kegiatan";
         document.getElementById('btnSave').style.display = "none";
         document.getElementById('btnUpdate').style.display = "inline-block";
         document.getElementById('btnCancel').style.display = "inline-block";
         
-        // Scroll ke form
         document.getElementById('formContainer').scrollIntoView({behavior: 'smooth'});
-        console.log("Edit kegiatan index:", idx, "data:", d);
+        showToast(`✏️ Sedang mengedit: ${(d.kegiatan || "").substring(0, 50)}`, "#3498db");
     }
     
     function deleteKegiatan(idx) {
@@ -1218,20 +1241,18 @@
         const picBody=document.querySelector("#picTable tbody"); picBody.innerHTML="";
         for(let [pic,data] of picMap.entries()){
             let percent=data.total===0?0:(data.selesai/data.total*100);
-            picBody.innerHTML+=`<tr>
+            picBody.innerHTML+=`</table>
                 <td>${pic}</td>
                 <td>${data.total}</td>
                 <td>${data.selesai}</td>
                 <td>${data.overdue}</td>
                 <td><div class="progress-bar-bg"><div class="progress-fill" style="width:${percent}%"></div></div> ${Math.round(percent)}%</div></td>
-            </tr>`;
+            </td>`;
         }
         
         const tbody=document.getElementById("tableBody"); tbody.innerHTML="";
         enriched.forEach((d,idx)=>{
             const originalIdx = projectData.findIndex(orig => orig === d);
-            const statusClass = d.status === "✔" ? "status-selesai" : (d.status === "⏳" ? "status-proses" : "status-belum");
-            const statusText = d.status === "✔" ? "Selesai" : (d.status === "⏳" ? "Proses" : "Belum");
             tbody.innerHTML+=`<tr class="${d.overdue?'overdue-row':''}" onclick="editKegiatan(${originalIdx})">
                 <td>${d.no}</td>
                 <td>${d.kegiatan}</td>
