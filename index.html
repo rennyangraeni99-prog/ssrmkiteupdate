@@ -1,3 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoring SSR Mobile KITE</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; }
+        body { background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: auto; }
+        h1 { font-size: 1.8rem; margin-bottom: 5px; color: #1e3c72; }
+        .sub { color: #2c5282; margin-bottom: 25px; border-left: 4px solid #2b6cb0; padding-left: 15px; }
+        .stats-grid { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 30px; }
+        .card { background: white; border-radius: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 18px 25px; flex: 1; min-width: 150px; border-top: 5px solid; cursor: pointer; }
+        .card h3 { margin: 0 0 8px 0; font-weight: 500; font-size: 1rem; color: #4a5568; }
+        .card .number { font-size: 2.5rem; font-weight: 700; }
+        .card.total { border-color: #3182ce; }
+        .card.selesai { border-color: #38a169; }
+        .card.belum { border-color: #e53e3e; }
+        .card.proses { border-color: #ed8936; }
+        .card.overdue { border-color: #d69e2e; }
+
+        .two-columns { display: flex; gap: 25px; flex-wrap: wrap; margin-bottom: 30px; }
+        .chart-box { background: white; border-radius: 20px; padding: 15px 20px; flex: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .pic-recap { background: white; border-radius: 20px; padding: 15px 20px; flex: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        .pic-recap th, .pic-recap td { padding: 10px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        .progress-bar-bg { background: #e2e8f0; border-radius: 20px; height: 8px; width: 100%; overflow: hidden; }
+        .progress-fill { background: #2b6cb0; height: 8px; width: 0%; border-radius: 20px; }
+
+        .data-table-wrapper { background: white; border-radius: 20px; padding: 5px 0; overflow-x: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .data-table th, .data-table td { border: 1px solid #e2e8f0; padding: 12px 8px; vertical-align: top; }
+        .data-table th { background: #f7fafc; font-weight: 600; color: #2d3748; position: sticky; top: 0; }
+        .data-table tr { cursor: pointer; transition: background 0.2s; }
+        .data-table tr:hover { background: #fef5e7 !important; }
+        .overdue-row { background-color: #fff5f0; border-left: 4px solid #f6ad55; }
+        .overdue-badge { background: #ed8936; color: white; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; display: inline-block; font-weight: bold; }
+        .status-icon { font-size: 1.2rem; }
+        .gantt-section { background: white; border-radius: 20px; margin-top: 20px; padding: 15px 20px; overflow-x: auto; }
+        .gantt-chart { min-width: 800px; }
+        .gantt-row { display: flex; align-items: center; margin-bottom: 6px; font-size: 0.75rem; }
+        .gantt-label { width: 220px; font-weight: 500; padding-right: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .gantt-bar-container { flex: 1; background: #edf2f7; border-radius: 12px; height: 28px; position: relative; }
+        .gantt-bar { background: #4299e1; height: 28px; border-radius: 12px; display: flex; align-items: center; padding-left: 8px; color: white; font-size: 0.7rem; font-weight: bold; white-space: nowrap; }
+        .gantt-bar.overdue-bar { background: #f6ad55; }
+        .legend { display: flex; gap: 20px; margin-bottom: 15px; font-size: 0.75rem; }
+        .legend span { display: inline-block; width: 20px; height: 12px; border-radius: 4px; margin-right: 5px; }
+        button { background: #2c5282; border: none; color: white; padding: 8px 16px; border-radius: 30px; cursor: pointer; margin-right: 10px; font-weight: 500; }
+        button.danger { background: #c53030; }
+        button.secondary { background: #718096; }
+        button.success { background: #38a169; }
+        button.warning { background: #d69e2e; }
+        .form-container { background: white; border-radius: 20px; padding: 20px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-size: 0.8rem; font-weight: 600; margin-bottom: 5px; color: #4a5568; }
+        .form-group input, .form-group select, .form-group textarea { padding: 8px 12px; border: 1px solid #cbd5e0; border-radius: 10px; font-size: 0.9rem; }
+        .button-group { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        .info-text { font-size: 0.75rem; color: #718096; margin-top: 10px; text-align: center; }
+        .action-buttons { margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .file-input-label { background: #38a169; padding: 8px 16px; border-radius: 30px; color: white; cursor: pointer; font-weight: 500; display: inline-block; }
+        input[type="file"] { display: none; }
+        .undo-redo-group { display: inline-flex; gap: 5px; background: #e2e8f0; padding: 4px 8px; border-radius: 40px; }
+        .undo-redo-group button { margin: 0; padding: 6px 14px; font-size: 0.85rem; }
+        .toast-notification { position: fixed; bottom: 20px; right: 20px; background: #2c5282; color: white; padding: 12px 20px; border-radius: 30px; font-size: 0.85rem; z-index: 1000; animation: fadeInOut 2s ease-in-out; }
+        @keyframes fadeInOut { 0% { opacity: 0; transform: translateY(20px); } 15% { opacity: 1; transform: translateY(0); } 85% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(20px); } }
+        .sync-status { font-size: 0.7rem; margin-left: 10px; color: #38a169; }
+        .search-box { display: flex; gap: 10px; align-items: center; }
+        .filter-input { padding: 8px 15px; border: 1px solid #cbd5e0; border-radius: 20px; width: 250px; }
+        .mode-badge { background: #e2e8f0; padding: 5px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; margin-left: 10px; }
+        .mode-badge.readonly { background: #e74c3c; color: white; }
+        .mode-badge.edit { background: #2ecc71; color: white; }
+        .password-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 10000; display: none; justify-content: center; align-items: center; }
+        .password-modal.show { display: flex; }
+        .password-box { background: white; padding: 40px; border-radius: 20px; text-align: center; max-width: 400px; width: 90%; }
+        .password-box h2 { color: #1e3c72; margin-bottom: 10px; }
+        .password-box p { color: #666; margin-bottom: 20px; }
+        .password-box input { padding: 12px 15px; width: 100%; border: 1px solid #cbd5e0; border-radius: 10px; font-size: 1rem; margin-bottom: 15px; }
+        .password-box button { background: #2c9b8a; padding: 12px 30px; width: 100%; }
+        .password-error { color: #e74c3c; margin-top: 15px; font-size: 0.85rem; }
+        .gantt-header-label { width: 220px; font-weight: bold; color: #2d3748; }
+        .gantt-header-months { flex: 1; position: relative; height: 24px; }
+        .month-header { position: absolute; font-size: 0.7rem; font-weight: bold; color: #2c5282; text-align: center; transform: translateX(-50%); }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📱 Pemantauan Project SSR Mobile KITE 
+        <span id="syncStatus" class="sync-status"></span>
+        <span id="modeBadge" class="mode-badge readonly">🔒 Read Only</span>
+    </h1>
+    <div class="sub">Sinkronisasi dengan Google Sheets | Data tersimpan di cloud</div>
+   
+    <div class="action-buttons">
+        <button id="enableEditBtn" onclick="showPasswordModal(null, null)" style="background:#2c9b8a;">✏️ Enable Edit Mode</button>
+        <button onclick="loadAllFromGoogleSheets()" style="background:#3498db;">📥 Load dari Cloud</button>
+        <button onclick="syncAllToGoogleSheets()" style="background:#2c9b8a;" id="syncBtn">☁️ Save ke Cloud</button>
+        <div class="undo-redo-group">
+            <button onclick="undo()" id="undoBtn" style="background:#d69e2e;">↩️ Undo</button>
+        </div>
+        <button onclick="exportToCSV()">📄 Export ke CSV</button>
+        <button onclick="exportToExcel()">📊 Export ke Excel</button>
+        <label class="file-input-label">
+            📂 Import CSV/Excel
+            <input type="file" id="importFile" accept=".csv,.xlsx,.xls" onchange="importFile(event)">
+        </label>
+        <button onclick="exportToJSON()" class="secondary">💾 Backup JSON</button>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 Cari kegiatan/PIC..." class="filter-input" onkeyup="filterTable()">
+        </div>
+    </div>
+
+    <div class="stats-grid" id="statsCards"></div>
+
+    <div class="two-columns">
+        <div class="chart-box">
+            <h3>📊 Progres Status Keseluruhan</h3>
+            <canvas id="statusChart" width="400" height="250" style="max-height:250px"></canvas>
+        </div>
+        <div class="pic-recap">
+            <h3>👥 Rekap per PIC</h3>
+            <table id="picTable">
+                <thead><tr><th>PIC</th><th>Total</th><th>Selesai</th><th>Overdue</th><th>Progres</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="form-container" id="formContainer">
+        <h3 id="formTitle">✏️ Tambah Kegiatan Baru</h3>
+        <div class="form-grid">
+            <div class="form-group"><label>No *</label><input type="text" id="inputNo" placeholder="11, 4d"></div>
+            <div class="form-group"><label>Kegiatan *</label><input type="text" id="inputKegiatan" placeholder="Nama kegiatan"></div>
+            <div class="form-group"><label>Jadwal</label><input type="text" id="inputJadwal" placeholder="Minggu I April 2026"></div>
+            <div class="form-group"><label>Status</label><select id="inputStatus"><option value="✖">❌ Belum</option><option value="⏳">⏳ Proses</option><option value="✔">✅ Selesai</option></select></div>
+            <div class="form-group"><label>PIC</label><input type="text" id="inputPic" placeholder="Penanggung jawab"></div>
+            <div class="form-group"><label>Start Date</label><input type="date" id="inputStartDate"></div>
+            <div class="form-group"><label>End Date</label><input type="date" id="inputEndDate"></div>
+            <div class="form-group"><label>Kendala</label><input type="text" id="inputKendala"></div>
+            <div class="form-group"><label>Tindak Lanjut</label><input type="text" id="inputTindakLanjut"></div>
+            <div class="form-group"><label>Keterangan</label><textarea id="inputKeterangan" rows="2"></textarea></div>
+        </div>
+        <div class="button-group">
+            <button id="btnSave" onclick="saveKegiatan()">💾 Simpan Baru</button>
+            <button id="btnUpdate" onclick="updateKegiatan()" style="display:none;">✏️ Update</button>
+            <button id="btnCancel" onclick="cancelEdit()" class="secondary" style="display:none;">❌ Batal</button>
+            <button onclick="clearForm()" class="secondary">🗑️ Bersihkan</button>
+        </div>
+        <div class="info-text">💡 Klik baris tabel untuk EDIT | Tekan "Enable Edit Mode" untuk mengedit data</div>
+    </div>
+
+    <div class="data-table-wrapper">
+        <table class="data-table" id="mainTable">
+            <thead><tr><th>No</th><th>Kegiatan</th><th>Jadwal</th><th>Start</th><th>End</th><th>Status</th><th>PIC</th><th>Kendala</th><th>Tindak Lanjut</th><th>Keterangan</th><th>Overdue</th><th>Aksi</th></tr></thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <div class="gantt-section">
+        <h3>📅 Timeline (Gantt Chart)</h3>
+        <div class="legend">
+            <div><span style="background:#4299e1;"></span> On-track</div>
+            <div><span style="background:#f6ad55;"></span> Overdue</div>
+        </div>
+        <div id="ganttContainer"></div>
+    </div>
+</div>
+
+<!-- PASSWORD MODAL -->
+<div id="passwordModal" class="password-modal">
+    <div class="password-box">
+        <h2>🔐 Verifikasi Password</h2>
+        <p>Masukkan password untuk mengaktifkan mode edit</p>
+        <input type="password" id="editPassword" placeholder="Masukkan password">
+        <button onclick="checkEditPassword()">Verifikasi</button>
+        <div id="passwordError" class="password-error"></div>
+        <button onclick="closePasswordModal()" style="background:#718096; margin-top:10px;">Batal</button>
+    </div>
+</div>
+
 <script>
     // ============================================================
     // KONFIGURASI PASSWORD
@@ -318,22 +501,22 @@
     }
     
     // ============================================================
-    // CRUD FUNCTIONS - DIPERBAIKI
+    // CRUD FUNCTIONS - DIPERBAIKI SEPENUHNYA
     // ============================================================
+    
+    // SAVE - Menambah data baru
     function saveKegiatan() {
         if (!isEditMode) {
             showPasswordModal('save');
             return;
         }
-        executeSaveKegiatan();
-    }
-    
-    function executeSaveKegiatan() {
+        
         if(!document.getElementById('inputNo').value.trim() || !document.getElementById('inputKegiatan').value.trim()) {
             alert("No dan Kegiatan wajib diisi!");
             return;
         }
-        projectData.push({
+        
+        const newData = {
             no: document.getElementById('inputNo').value.trim(),
             kegiatan: document.getElementById('inputKegiatan').value.trim(),
             jadwal: document.getElementById('inputJadwal').value,
@@ -344,34 +527,37 @@
             kendala: document.getElementById('inputKendala').value,
             tindakLanjut: document.getElementById('inputTindakLanjut').value,
             keterangan: document.getElementById('inputKeterangan').value
-        });
+        };
+        
+        projectData.push(newData);
         recordChangeAndSave("Tambah kegiatan");
         clearForm(); 
         renderAll();
         syncAllToGoogleSheets();
+        showToast("✅ Kegiatan berhasil ditambahkan!", "#2ecc71");
     }
     
+    // UPDATE - Mengedit data yang sudah dipilih
     function updateKegiatan() {
         // Cek apakah dalam mode edit
         if (!isEditMode) {
             showPasswordModal('update');
             return;
         }
+        
         // Cek apakah ada kegiatan yang sedang diedit
         if (currentEditIndex === -1) {
             alert("Tidak ada kegiatan yang sedang diedit. Silakan klik baris tabel terlebih dahulu.");
             return;
         }
+        
         // Validasi input
         if(!document.getElementById('inputNo').value.trim() || !document.getElementById('inputKegiatan').value.trim()) {
             alert("No dan Kegiatan wajib diisi!");
             return;
         }
-        executeUpdateKegiatan();
-    }
-    
-    function executeUpdateKegiatan() {
-        // Update data pada index yang sedang diedit
+        
+        // Update data
         projectData[currentEditIndex] = {
             no: document.getElementById('inputNo').value.trim(),
             kegiatan: document.getElementById('inputKegiatan').value.trim(),
@@ -384,24 +570,25 @@
             tindakLanjut: document.getElementById('inputTindakLanjut').value,
             keterangan: document.getElementById('inputKeterangan').value
         };
+        
         recordChangeAndSave("Update kegiatan");
-        cancelEdit(); // Ini akan mereset form dan mengembalikan tombol ke mode "Simpan Baru"
+        cancelEdit(); // Reset form dan tombol
         renderAll();
         syncAllToGoogleSheets();
         showToast("✅ Kegiatan berhasil diupdate!", "#2ecc71");
     }
     
+    // EDIT - Memuat data ke form untuk diedit
     function editKegiatan(idx) {
         if (!isEditMode) {
             showPasswordModal('edit', idx);
             return;
         }
-        executeEditKegiatan(idx);
-    }
-    
-    function executeEditKegiatan(idx) {
+        
         currentEditIndex = idx;
         const d = projectData[idx];
+        
+        // Isi form dengan data yang dipilih
         document.getElementById('inputNo').value = d.no;
         document.getElementById('inputKegiatan').value = d.kegiatan;
         document.getElementById('inputJadwal').value = d.jadwal || "";
@@ -421,26 +608,28 @@
         
         // Scroll ke form
         document.getElementById('formContainer').scrollIntoView({behavior: 'smooth'});
+        
+        showToast(`✏️ Sedang mengedit: ${d.kegiatan.substring(0, 50)}`, "#3498db");
     }
     
+    // DELETE - Menghapus data
     function deleteKegiatan(idx) {
         if (!isEditMode) {
             showPasswordModal('delete', idx);
             return;
         }
-        executeDeleteKegiatan(idx);
-    }
-    
-    function executeDeleteKegiatan(idx) {
-        if(confirm(`Hapus "${projectData[idx].kegiatan}"?`)){ 
+        
+        if(confirm(`Hapus kegiatan "${projectData[idx].kegiatan}"?`)){ 
             projectData.splice(idx, 1); 
             recordChangeAndSave("Hapus kegiatan");
             if(currentEditIndex === idx) cancelEdit(); 
             renderAll();
             syncAllToGoogleSheets();
+            showToast("🗑️ Kegiatan berhasil dihapus!", "#e74c3c");
         }
     }
     
+    // CANCEL EDIT - Membatalkan edit dan kembali ke mode tambah
     function cancelEdit() {
         currentEditIndex = -1;
         clearForm();
@@ -448,6 +637,7 @@
         document.getElementById('btnSave').style.display = "inline-block";
         document.getElementById('btnUpdate').style.display = "none";
         document.getElementById('btnCancel').style.display = "none";
+        showToast("Edit dibatalkan", "#718096");
     }
     
     function clearForm() {
@@ -785,3 +975,5 @@
     loadData();
     clearForm();
 </script>
+</body>
+</html>
